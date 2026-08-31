@@ -36,23 +36,62 @@ const SBKEY='hikari-supabase-config-v1';
 function sbConfig(){try{return JSON.parse(localStorage.getItem(SBKEY)||'null')}catch(e){return null}}
 function initSupabase(){const c=sbConfig(); if(c?.url && c?.key && window.supabase){try{SB=window.supabase.createClient(String(c.url).trim(),String(c.key).trim()); return true}catch(e){console.error(e);SB=null}} return false}
 initSupabase();
-async function cloudSync(){if(!SB){alert('Configure o Supabase primeiro em Configurações.');return} try{
-  const products=S.products.map(p=>({legacy_id:p[0],nome:p[1],custo:Number(p[2]||0),preco_venda:Number(price(p)||0),peso_gramas:p[1].includes('800')?800:400}));
-  const {data:ps,error:pe}=await SB.from('produtos').upsert(products,{onConflict:'legacy_id'}).select(); if(pe) throw pe;
-  const {error:ce}=await SB.from('configuracoes').upsert({id:1,margem_lucro:Number(S.cfg.goal),taxa_ifood:17,motoboy_padrao:Number(S.cfg.boy),entrega_padrao:Number(S.cfg.charge)},{onConflict:'id'}); if(ce) throw ce;
-  const ingredients=S.ingredients.map(i=>({legacy_id:i.id,nome:i.name,unidade:i.unit,quantidade_comprada:Number(i.pack||0),valor_pago:Number(i.price||0)}));
-  const {error:ie}=await SB.from('ingredientes').upsert(ingredients,{onConflict:'legacy_id'}); if(ie) throw ie;
-  alert('Hikari sincronizado com o Supabase!');
-}catch(e){console.error(e);alert('Erro ao sincronizar: '+(e.message||e))}}
+async function testSupabaseConnection(){
+  const c=sbConfig();
+  if(!c?.url || !c?.key) return {ok:false,message:'URL ou chave do Supabase não configurada.'};
+  const url=String(c.url).trim().replace(/\/$/,'');
+  try{
+    const r=await fetch(url+'/rest/v1/',{method:'GET',headers:{apikey:String(c.key).trim(),Authorization:'Bearer '+String(c.key).trim()}});
+    const body=await r.text();
+    if(!r.ok) return {ok:false,message:'Supabase respondeu HTTP '+r.status+(body?' — '+body.slice(0,220):'')};
+    return {ok:true};
+  }catch(e){
+    return {ok:false,message:'O navegador não conseguiu acessar o Supabase. Verifique a Project URL, a Publishable key e a conexão com a internet. Detalhe: '+(e.message||e)};
+  }
+}
+async function cloudSync(){
+  if(!SB){alert('Configure o Supabase primeiro em Configurações.');return}
+  const test=await testSupabaseConnection();
+  if(!test.ok){alert('Não foi possível conectar ao banco.\n\n'+test.message);return}
+  try{
+    const products=S.products.map(p=>({legacy_id:p[0],nome:p[1],custo:Number(p[2]||0),preco_venda:Number(price(p)||0),peso_gramas:p[1].includes('800')?800:400}));
+    const {error:pe}=await SB.from('produtos').upsert(products,{onConflict:'legacy_id'});
+    if(pe) throw new Error('Tabela produtos: '+(pe.message||pe.details||pe.hint||pe.code||pe));
+    const {error:ce}=await SB.from('configuracoes').upsert({id:1,margem_lucro:Number(S.cfg.goal),taxa_ifood:17,motoboy_padrao:Number(S.cfg.boy),entrega_padrao:Number(S.cfg.charge)},{onConflict:'id'});
+    if(ce) throw new Error('Tabela configuracoes: '+(ce.message||ce.details||ce.hint||ce.code||ce));
+    const ingredients=S.ingredients.map(i=>({legacy_id:i.id,nome:i.name,unidade:i.unit,quantidade_comprada:Number(i.pack||0),valor_pago:Number(i.price||0)}));
+    const {error:ie}=await SB.from('ingredientes').upsert(ingredients,{onConflict:'legacy_id'});
+    if(ie) throw new Error('Tabela ingredientes: '+(ie.message||ie.details||ie.hint||ie.code||ie));
+    alert('Hikari sincronizado com o Supabase!');
+  }catch(e){console.error(e);alert('Erro ao sincronizar o banco:\n\n'+(e.message||e))}
+}
 
-async function silentCloudSync(){if(!SB)return;try{
-  const products=S.products.map(p=>({legacy_id:p[0],nome:p[1],custo:Number(p[2]||0),preco_venda:Number(price(p)||0),peso_gramas:p[1].includes('800')?800:400}));
-  const {error:pe}=await SB.from('produtos').upsert(products,{onConflict:'legacy_id'}); if(pe) throw pe;
-  const {error:ce}=await SB.from('configuracoes').upsert({id:1,margem_lucro:Number(S.cfg.goal),taxa_ifood:17,motoboy_padrao:Number(S.cfg.boy),entrega_padrao:Number(S.cfg.charge)},{onConflict:'id'}); if(ce) throw ce;
-  const ingredients=S.ingredients.map(i=>({legacy_id:i.id,nome:i.name,unidade:i.unit,quantidade_comprada:Number(i.pack||0),valor_pago:Number(i.price||0)}));
-  const {error:ie}=await SB.from('ingredientes').upsert(ingredients,{onConflict:'legacy_id'}); if(ie) throw ie;
-}catch(e){console.error('Sincronização automática:',e)}}
-function openCloud(){const c=sbConfig()||{};const url=(prompt('Cole aqui a Project URL do Supabase:',c.url||'')||'').trim();if(!url)return;const key=(prompt('Cole aqui a Publishable key (anon) do Supabase:',c.key||'')||'').trim();if(!key)return;localStorage.setItem(SBKEY,JSON.stringify({url,key}));if(initSupabase()){cloudStatus();alert('Supabase conectado e pronto. Os dados serão sincronizados automaticamente.')}else{alert('Não foi possível iniciar a conexão. Confira a URL e a Publishable key.')}}
+async function silentCloudSync(){
+  if(!SB)return;
+  try{
+    const test=await testSupabaseConnection();
+    if(!test.ok){console.warn('Sincronização automática pausada:',test.message);return}
+    const products=S.products.map(p=>({legacy_id:p[0],nome:p[1],custo:Number(p[2]||0),preco_venda:Number(price(p)||0),peso_gramas:p[1].includes('800')?800:400}));
+    const {error:pe}=await SB.from('produtos').upsert(products,{onConflict:'legacy_id'}); if(pe) throw pe;
+    const {error:ce}=await SB.from('configuracoes').upsert({id:1,margem_lucro:Number(S.cfg.goal),taxa_ifood:17,motoboy_padrao:Number(S.cfg.boy),entrega_padrao:Number(S.cfg.charge)},{onConflict:'id'}); if(ce) throw ce;
+    const ingredients=S.ingredients.map(i=>({legacy_id:i.id,nome:i.name,unidade:i.unit,quantidade_comprada:Number(i.pack||0),valor_pago:Number(i.price||0)}));
+    const {error:ie}=await SB.from('ingredientes').upsert(ingredients,{onConflict:'legacy_id'}); if(ie) throw ie;
+  }catch(e){console.error('Sincronização automática:',e)}
+}
+async function openCloud(){
+  const c=sbConfig()||{};
+  let url=(prompt('Cole aqui a Project URL do Supabase:',c.url||'')||'').trim().replace(/\/$/,'');
+  if(!url)return;
+  let key=(prompt('Cole aqui a Publishable key (anon) do Supabase:',c.key||'')||'').trim();
+  if(!key)return;
+  if(!/^https:\/\//i.test(url)){alert('A Project URL precisa começar com https://');return}
+  localStorage.setItem(SBKEY,JSON.stringify({url,key}));
+  if(!initSupabase()){cloudStatus();alert('Não foi possível iniciar a conexão. Confira a URL e a Publishable key.');return}
+  cloudStatus();
+  const test=await testSupabaseConnection();
+  if(test.ok){alert('Supabase conectado com sucesso. Agora o Hikari consegue testar o banco antes de sincronizar.')}
+  else{alert('A configuração foi salva, mas o teste de conexão falhou.\n\n'+test.message)}
+}
 function cloudStatus(){const el=document.getElementById('cloudStatus');if(el)el.textContent=SB?'🟢 Banco conectado':'⚪ Banco não conectado'}
 const oldRender=render; render=function(){oldRender();cloudStatus()};
 const M=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),KEY='hikari-control-v1';
