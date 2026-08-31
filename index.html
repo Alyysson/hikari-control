@@ -44,7 +44,22 @@ async function signup(){const email=document.getElementById('loginEmail').value.
 async function resetPassword(){const email=document.getElementById('loginEmail').value.trim();if(!email){setLoginMsg('Digite seu e-mail primeiro.');return}const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:location.origin});setLoginMsg(error?error.message:'Enviamos o link de recuperação para seu e-mail.',!error)}
 async function logout(){await SB.auth.signOut();currentUser=null;showLogin()}
 async function loadCloud(){if(!currentUser)return;try{const {data,error}=await SB.from('hikari_data').select('data').eq('user_id',currentUser.id).maybeSingle();if(error)throw error;if(data?.data){S=Object.assign(S,data.data);S.cfg=S.cfg||{fee:28,goal:80,boy:13,charge:4};S.sales=S.sales||[];S.ingredients=S.ingredients||[];S.recipes=S.recipes||{}}localStorage.setItem(KEY,JSON.stringify(S));}catch(e){console.error(e);setLoginMsg('Login feito, mas não consegui carregar os dados da nuvem: '+(e.message||e));}}
-async function saveCloud(){if(!currentUser)return;try{const {error}=await SB.from('hikari_data').upsert({user_id:currentUser.id,data:S,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error)throw error;const el=document.getElementById('cloudStatus');if(el)el.textContent='🟢 Banco online conectado'}catch(e){console.error('cloud save',e);const el=document.getElementById('cloudStatus');if(el)el.textContent='🔴 Erro ao salvar na nuvem'}}
+async function saveCloud(){
+ if(!currentUser)return false;
+ try{
+  const payload={user_id:currentUser.id,data:S,updated_at:new Date().toISOString()};
+  const {error}=await SB.from('hikari_data').upsert(payload,{onConflict:'user_id'});
+  if(error)throw error;
+  const el=document.getElementById('cloudStatus');
+  if(el)el.textContent='🟢 Banco online salvo';
+  return true;
+ }catch(e){
+  console.error('cloud save',e);
+  const el=document.getElementById('cloudStatus');
+  if(el)el.textContent='🔴 Banco: '+(e.message||'erro ao salvar');
+  return false;
+ } 
+}
 function queueCloudSave(){if(!currentUser)return;clearTimeout(cloudTimer);cloudTimer=setTimeout(saveCloud,500)}
 async function initAuth(){const {data}=await SB.auth.getSession();if(data.session){currentUser=data.session.user;await loadCloud();showApp();render()}else showLogin();SB.auth.onAuthStateChange(async(event,session)=>{if(event==='SIGNED_OUT'){currentUser=null;showLogin()}else if(event==='SIGNED_IN'&&session&&!currentUser){currentUser=session.user;await loadCloud();showApp();render()}})}
 function cloudStatus(){const el=document.getElementById('cloudStatus');if(el)el.textContent=currentUser?'🟢 Banco online conectado':'🔴 Faça login'}
@@ -116,7 +131,29 @@ function fixedExtraCost(size){const mult=size===800?2:1;let total=0;
   const gergelim=ing('gergelim'); if(gergelim) total+=ingCost(gergelim)*4*mult;
   return total;
 }
-function simpleCost(size){const mult=size===800?2:1;let total=baseItems(size).reduce((s,x)=>s+ingCost(x.id)*x.q,0)+fixedExtraCost(size);const pid=document.getElementById('recipeProduct').value,p=prod(pid);const protein=document.getElementById('proteinSelect').value,i=ing(protein);const qty=size===800?(+document.getElementById('proteinQty800').value||300):(+document.getElementById('proteinQty').value||150);if(i)total+=ingCost(i)*qty;return total}
+function simpleCost(size){
+ const mult=size===800?2:1;
+ let total=0;
+ baseItems(size).forEach(x=>{
+   const i=ing(x.id);
+   if(i) total += (Number(i.price)||0)/(Number(i.pack)||1)*Number(x.q||0);
+ });
+ total += fixedExtraCost(size);
+ const proteinId=document.getElementById('proteinSelect')?.value;
+ const protein=ing(proteinId);
+ const qty=Number(size===800?document.getElementById('proteinQty800')?.value:document.getElementById('proteinQty')?.value)|| (size===800?300:150);
+ if(protein) total += (Number(protein.price)||0)/(Number(protein.pack)||1)*qty;
+ return Number.isFinite(total)?total:0;
+}
+function calculateSimpleRecipe(){
+ const pid=document.getElementById('recipeProduct')?.value;
+ const p=prod(pid);
+ if(!p)return;
+ const c400=simpleCost(400), c800=simpleCost(800);
+ document.getElementById('simpleTitle').textContent=p[1];
+ document.getElementById('simpleCost400').textContent=M(c400);
+ document.getElementById('simpleCost800').textContent=M(c800);
+}
 function calculateSimpleRecipe(){const pid=document.getElementById('recipeProduct').value;const p=prod(pid);if(!p)return;document.getElementById('simpleTitle').textContent=p[1];document.getElementById('simpleCost400').textContent=M(simpleCost(400));document.getElementById('simpleCost800').textContent=M(simpleCost(800))}
 function applySimpleCost(){const pid=document.getElementById('recipeProduct').value,p=prod(pid);if(!p)return;const size=p[1].includes('800')?800:400;p[2]=Number(simpleCost(size).toFixed(2));render();alert('Custo do prato atualizado pela ficha técnica.');}
 function renderSimpleRecipeUI(){const ps=document.getElementById('recipeProduct');if(!ps)return;const current=ps.value;ps.innerHTML=S.products.map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('');if(S.products.some(p=>p[0]===current))ps.value=current;const pro=document.getElementById('proteinSelect');const cur=pro.value;pro.innerHTML=proteinIds().map(id=>{const i=ing(id);return i?`<option value="${id}">${i.name} — ${M(i.price)}/${i.pack}${i.unit}</option>`:''}).join('');if(proteinIds().includes(cur))pro.value=cur;const pid=ps.value,p=prod(pid);document.getElementById('simpleTitle').textContent=p?p[1]:'Yakisoba';
