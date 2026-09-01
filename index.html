@@ -64,31 +64,33 @@ const M=v=>Number(v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}
 let S=JSON.parse(localStorage.getItem(KEY)||'null')||{cfg:{fee:28,goal:80,boy:13,charge:4},products:[
 ['f400','🍗 Frango 400 g',9.20],['s400','🐖 Suíno 400 g',11.45],['c400','🥩 Carne 400 g',14.89],['ca400','🍤 Camarão 400 g',24.95],['v400','🍄 Vegano 400 g',12.20],
 ['f800','🍗 Frango 800 g',15.43],['s800','🐖 Suíno 800 g',19.18],['c800','🥩 Carne 800 g',24.91],['ca800','🍤 Camarão 800 g',35.43],['v800','🍄 Vegano 800 g',18.97]],sales:[],ingredients:[],recipes:{}}; 
-S.ingredients=S.ingredients||[];
-// Ingredientes já calculados nesta conversa. Os valores continuam editáveis.
-if(S.ingredients.length===0){
-  S.ingredients=[
-    {id:'tomate',name:'Tomate',price:6.99,pack:1000,unit:'g'},
-    {id:'cenoura',name:'Cenoura',price:3.00,pack:300,unit:'g'},
-    {id:'repolho',name:'Repolho verde',price:4.00,pack:800,unit:'g'},
-    {id:'repolhoroxo',name:'Repolho roxo',price:8.99,pack:1000,unit:'g'},
-    {id:'brocolis',name:'Brócolis',price:3.00,pack:350,unit:'g'},
-    {id:'couveflor',name:'Couve-flor',price:3.00,pack:350,unit:'g'},
-    {id:'pimentaoverde',name:'Pimentão verde',price:12.00,pack:1000,unit:'g'},
-    {id:'pimentaovermelho',name:'Pimentão vermelho',price:12.00,pack:1000,unit:'g'},
-    {id:'cebolaroxa',name:'Cebola roxa',price:8.99,pack:1000,unit:'g'},
-    {id:'cebolabranca',name:'Cebola branca',price:8.99,pack:1000,unit:'g'},
-    {id:'frango',name:'Frango',price:19.99,pack:1000,unit:'g'},
-    {id:'suino',name:'Carne suína',price:34.99,pack:1000,unit:'g'},
-    {id:'carne',name:'Carne bovina',price:57.90,pack:1000,unit:'g'},
-    {id:'camarao',name:'Camarão',price:50.00,pack:400,unit:'g'},
-    {id:'shoyu',name:'Shoyu',price:7.00,pack:1000,unit:'ml'},
-    {id:'oleo',name:'Óleo de cozinha',price:7.00,pack:1000,unit:'ml'},
-    {id:'gergelim',name:'Gergelim',price:10.00,pack:200,unit:'g'}
-  ];
-}
-
-if(!S.ingredients.some(i=>i.id==='massa')) S.ingredients.push({id:'massa',name:'Massa de yakisoba',price:10.00,pack:1000,unit:'g'});
+// Normaliza os ingredientes mesmo quando a conta já tinha dados salvos na nuvem.
+const DEFAULT_INGREDIENTS=[
+{id:'tomate',name:'Tomate',price:6.99,pack:1000,unit:'g'},
+{id:'cenoura',name:'Cenoura',price:3.00,pack:300,unit:'g'},
+{id:'repolho',name:'Repolho verde',price:4.00,pack:800,unit:'g'},
+{id:'repolhoroxo',name:'Repolho roxo',price:8.99,pack:1000,unit:'g'},
+{id:'brocolis',name:'Brócolis',price:3.00,pack:350,unit:'g'},
+{id:'couveflor',name:'Couve-flor',price:3.00,pack:350,unit:'g'},
+{id:'pimentaoverde',name:'Pimentão verde',price:12.00,pack:1000,unit:'g'},
+{id:'pimentaovermelho',name:'Pimentão vermelho',price:12.00,pack:1000,unit:'g'},
+{id:'cebolaroxa',name:'Cebola roxa',price:8.99,pack:1000,unit:'g'},
+{id:'cebolabranca',name:'Cebola branca',price:8.99,pack:1000,unit:'g'},
+{id:'frango',name:'Frango',price:19.99,pack:1000,unit:'g'},
+{id:'suino',name:'Carne suína',price:34.99,pack:1000,unit:'g'},
+{id:'carne',name:'Carne bovina',price:57.90,pack:1000,unit:'g'},
+{id:'camarao',name:'Camarão',price:50.00,pack:400,unit:'g'},
+{id:'shoyu',name:'Shoyu',price:7.00,pack:1000,unit:'ml'},
+{id:'oleo',name:'Óleo de cozinha',price:7.00,pack:1000,unit:'ml'},
+{id:'gergelim',name:'Gergelim',price:10.00,pack:200,unit:'g'},
+{id:'massa',name:'Massa de yakisoba',price:10.00,pack:1000,unit:'g'}
+];
+S.ingredients=Array.isArray(S.ingredients)?S.ingredients:[];
+DEFAULT_INGREDIENTS.forEach(d=>{
+ const i=S.ingredients.find(x=>x&&x.id===d.id);
+ if(!i) S.ingredients.push({...d});
+ else {i.name=i.name||d.name;i.price=Number(i.price)||d.price;i.pack=Number(i.pack)||d.pack;i.unit=i.unit||d.unit;}
+});
  S.recipes=S.recipes||{};
 S.products.forEach(p=>{if(p.length<4)p.push(null)});
 const prod=id=>S.products.find(p=>p[0]===id),price=p=>(p[3]!=null&&p[3]!==''?Number(p[3]):p[2]*(1+S.cfg.goal/100)/(1-S.cfg.fee/100)),fee=x=>x*S.cfg.fee/100;
@@ -170,8 +172,25 @@ function fixedExtraCost(size){const mult=size===800?2:1;let total=0;
   const gergelim=ing('gergelim'); if(gergelim) total+=ingCost(gergelim)*4*mult;
   return total;
 }
-function simpleCost(size){const mult=size===800?2:1;let total=baseItems(size).reduce((s,x)=>s+ingCost(x.id)*x.q,0)+fixedExtraCost(size);const pid=document.getElementById('recipeProduct').value,p=prod(pid);const protein=document.getElementById('proteinSelect').value,i=ing(protein);const qty=size===800?(+document.getElementById('proteinQty800').value||300):(+document.getElementById('proteinQty').value||150);if(i)total+=ingCost(i)*qty;return total}
-function calculateSimpleRecipe(){const pid=document.getElementById('recipeProduct').value;const p=prod(pid);if(!p)return;document.getElementById('simpleTitle').textContent=p[1];document.getElementById('simpleCost400').textContent=M(simpleCost(400));document.getElementById('simpleCost800').textContent=M(simpleCost(800))}
+function simpleCost(size){
+ const mult=size===800?2:1;
+ let total=baseItems(size).reduce((s,x)=>s+(Number(ingCost(x.id))||0)*(Number(x.q)||0),0)+fixedExtraCost(size);
+ const proteinEl=document.getElementById('proteinSelect');
+ const protein=proteinEl?proteinEl.value:'frango';
+ const i=ing(protein);
+ const qEl=document.getElementById(size===800?'proteinQty800':'proteinQty');
+ const qty=Number(qEl&&qEl.value)||(size===800?300:150);
+ if(i) total+=(Number(i.price)||0)/(Number(i.pack)||1)*qty;
+ return Number.isFinite(total)?total:0;
+}
+function calculateSimpleRecipe(){
+ const pid=document.getElementById('recipeProduct').value,p=prod(pid);
+ if(!p)return;
+ document.getElementById('simpleTitle').textContent=p[1];
+ const c400=simpleCost(400),c800=simpleCost(800);
+ document.getElementById('simpleCost400').textContent=M(c400);
+ document.getElementById('simpleCost800').textContent=M(c800);
+}
 function applySimpleCost(){const pid=document.getElementById('recipeProduct').value,p=prod(pid);if(!p)return;const size=p[1].includes('800')?800:400;p[2]=Number(simpleCost(size).toFixed(2));render();alert('Custo do prato atualizado pela ficha técnica.');}
 function renderSimpleRecipeUI(){const ps=document.getElementById('recipeProduct');if(!ps)return;const current=ps.value;ps.innerHTML=S.products.filter(p=>p[4]!=='item').map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('');if(S.products.some(p=>p[0]===current))ps.value=current;const pro=document.getElementById('proteinSelect');const cur=pro.value;pro.innerHTML=proteinIds().map(id=>{const i=ing(id);return i?`<option value="${id}">${i.name} — ${M(i.price)}/${i.pack}${i.unit}</option>`:''}).join('');if(proteinIds().includes(cur))pro.value=cur;const pid=ps.value,p=prod(pid);document.getElementById('simpleTitle').textContent=p?p[1]:'Yakisoba';
   document.getElementById('baseTable').innerHTML=baseItems(400).map(x=>{const i=ing(x.id),c=ingCost(i)*x.q;return `<tr><td>${i.name}</td><td>${i.unit==='g'?M(i.price)+' / kg':M(i.price)+' / '+i.pack+i.unit}</td><td>${x.q}g</td><td>${x.q*2}g</td><td class="green">${M(c)}</td></tr>`}).join('');
