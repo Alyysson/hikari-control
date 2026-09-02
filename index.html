@@ -23,8 +23,8 @@
 <div class="row" style="margin-top:12px"><button class="btn primary" onclick="calculateSimpleRecipe()">Calcular custo</button><button class="btn yellow" onclick="applySimpleCost()">Aplicar custo ao produto</button></div>
 </div>
 <div class="two">
-<div class="card"><div class="title"><h3>Resultado</h3><span id="simpleTitle">Yakisoba</span></div><div class="box"><div class="muted">Custo dos ingredientes • 400 g</div><div class="big" id="simpleCost400">R$ 0,00</div><div class="muted" style="margin-top:8px">Custo dos ingredientes • 800 g</div><div class="big" id="simpleCost800">R$ 0,00</div></div></div>
-<div class="card"><div class="title"><h3>Atualizar preço de compra</h3><span>sem complicação</span></div><p class="muted">Na tabela abaixo, altere somente o preço que você pagou. O custo por grama/ml é recalculado automaticamente.</p><div id="simpleIngredientEdits"></div></div>
+<div class="card"><div class="title"><h3>Resultado</h3><span id="simpleTitle">Yakisoba</span></div><div class="box"><div class="muted">Custo total com embalagem • 400 g</div><div class="big" id="simpleCost400">R$ 0,00</div><div class="muted" style="margin-top:8px">Custo total com embalagem • 800 g</div><div class="big" id="simpleCost800">R$ 0,00</div><div class="muted" style="margin-top:10px">Inclui ingredientes + proteína + embalagem.</div></div></div>
+<div class="card"><div class="title"><h3>Atualizar preço de compra</h3><span>sem complicação</span></div><p class="muted">Na tabela abaixo, altere somente o preço que você pagou. O custo por grama/ml é recalculado automaticamente.</p><div id="simpleIngredientEdits"></div><div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--line)"><div style="font-weight:700;margin-bottom:6px">Embalagem</div><div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0"><span>Embalagem 400 g</span><input id="packaging400" style="max-width:105px" type="number" min="0" step=".01" onchange="updatePackagingPrice(400,this.value)"></div><div class="row" style="justify-content:space-between;padding:8px 0"><span>Embalagem 800 g</span><input id="packaging800" style="max-width:105px" type="number" min="0" step=".01" onchange="updatePackagingPrice(800,this.value)"></div><div class="muted" style="margin-top:6px">Coloque o preço que você realmente paga. Se comprar mais barato depois, é só alterar aqui.</div></div></div>
 </div>
 </section>
 <section id="produtos" class="view">
@@ -85,6 +85,7 @@ const DEFAULT_INGREDIENTS=[
 {id:'gergelim',name:'Gergelim',price:10.00,pack:200,unit:'g'},
 {id:'massa',name:'Massa de yakisoba',price:10.00,pack:1000,unit:'g'}
 ];
+S.cfg=S.cfg||{}; if(S.cfg.packaging400==null)S.cfg.packaging400=0; if(S.cfg.packaging800==null)S.cfg.packaging800=0;
 S.ingredients=Array.isArray(S.ingredients)?S.ingredients:[];
 DEFAULT_INGREDIENTS.forEach(d=>{
  const i=S.ingredients.find(x=>x&&x.id===d.id);
@@ -94,12 +95,12 @@ DEFAULT_INGREDIENTS.forEach(d=>{
  S.recipes=S.recipes||{};
 S.products.forEach(p=>{if(p.length<4)p.push(null)});
 const prod=id=>S.products.find(p=>p[0]===id),price=p=>(p[3]!=null&&p[3]!==''?Number(p[3]):p[2]*(1+S.cfg.goal/100)/(1-S.cfg.fee/100)),fee=x=>x*S.cfg.fee/100;
-function save(){localStorage.setItem(KEY,JSON.stringify(S));saveCloud()} function today(){return S.sales.filter(x=>x.date===new Date().toISOString().slice(0,10))}
+function save(){localStorage.setItem(KEY,JSON.stringify(S));saveCloud()} function normalizeDate(v){const s=String(v||'').trim();if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.slice(0,10);const m=s.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{4})$/);return m?`${m[3]}-${m[2]}-${m[1]}`:''} function today(){const d=new Date().toISOString().slice(0,10);return S.sales.filter(x=>normalizeDate(x.date)===d)}
 function render(){save();sync();dash();sales();prices();products();costs();renderSimpleRecipeUI();calc()}
 function sync(){document.getElementById('goal').textContent=S.cfg.goal+'%';document.getElementById('feeShow').textContent=S.cfg.fee+'%';document.getElementById('boy').textContent=M(S.cfg.boy);document.getElementById('cfgFee').value=S.cfg.fee;document.getElementById('cfgGoal').value=S.cfg.goal;document.getElementById('cfgBoy').value=S.cfg.boy;document.getElementById('cfgCharge').value=S.cfg.charge;document.getElementById('saleCharge').value=S.cfg.charge;document.getElementById('saleBoy').value=S.cfg.boy;document.getElementById('saleProd').innerHTML=S.products.map(p=>`<option value="${p[0]}">${p[1]} — ${M(price(p))}</option>`).join('');if(!document.getElementById('saleDate').value)document.getElementById('saleDate').value=new Date().toISOString().slice(0,10);if(!document.getElementById('salesDate').value)document.getElementById('salesDate').value=new Date().toISOString().slice(0,10);toggleSaleMode();syncSalePrice();}
 function saleItemList(x){return Array.isArray(x.items)&&x.items.length?x.items:[{product:x.product,qty:Number(x.qty)||0,total:Number(x.revenue)||0,cost:Number(x.cost)||0}]}
 function dash(){
- const now=new Date(),ym=now.toISOString().slice(0,7),today=now.toISOString().slice(0,10),a=S.sales.filter(x=>String(x.date||'').slice(0,7)===ym),d=S.sales.filter(x=>String(x.date||'').slice(0,10)===today),all=S.sales;
+ const now=new Date(),ym=now.toISOString().slice(0,7),today=now.toISOString().slice(0,10),a=S.sales.filter(x=>normalizeDate(x.date).slice(0,7)===ym),d=S.sales.filter(x=>normalizeDate(x.date)===today),all=S.sales;
  const calc=arr=>arr.reduce((t,x)=>({f:t.f+(Number(x.revenue)||0),c:t.c+(Number(x.cost)||0)+(Number(x.boyPaid)||0),e:t.e+(Number(x.deliveryNet)||0),l:t.l+(Number(x.profit)||0)}),{f:0,c:0,e:0,l:0});
  const m=calc(a),day=calc(d),g=calc(all),map={};
  a.forEach(x=>{const items=saleItemList(x),base=items.reduce((t,i)=>t+(Number(i.total)||0),0)||1;items.forEach(i=>{map[i.product]=(map[i.product]||{q:0,l:0});map[i.product].q+=Number(i.qty)||0;map[i.product].l+=(Number(x.profit)||0)*((Number(i.total)||0)/base)})});
@@ -108,7 +109,7 @@ function dash(){
  const dd=document.getElementById('dashDate');if(dd&&!dd.value)dd.value=today;dashSelectedDay();
  document.getElementById('rank').innerHTML=Object.keys(map).length?Object.entries(map).sort((a,b)=>b[1].l-a[1].l).map(([n,x])=>`<tr><td>${n}</td><td>${x.q}</td><td class="green"><b>${M(x.l)}</b></td></tr>`).join(''):`<tr><td colspan="3" class="empty">Nenhuma venda neste mês.</td></tr>`;
 }
-function dashSelectedDay(){const selected=document.getElementById('dashDate')?.value||new Date().toISOString().slice(0,10),a=S.sales.filter(x=>x.date===selected),g=a.reduce((t,x)=>({f:t.f+(Number(x.revenue)||0),c:t.c+(Number(x.cost)||0)+(Number(x.boyPaid)||0),e:t.e+(Number(x.deliveryNet)||0),l:t.l+(Number(x.profit)||0)}),{f:0,c:0,e:0,l:0});['selDayFat','selDayCust','selDayEnt','selDayLuc'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=M([g.f,g.c,g.e,g.l][i])})}
+function dashSelectedDay(){const selected=document.getElementById('dashDate')?.value||new Date().toISOString().slice(0,10),a=S.sales.filter(x=>normalizeDate(x.date)===selected),g=a.reduce((t,x)=>({f:t.f+(Number(x.revenue)||0),c:t.c+(Number(x.cost)||0)+(Number(x.boyPaid)||0),e:t.e+(Number(x.deliveryNet)||0),l:t.l+(Number(x.profit)||0)}),{f:0,c:0,e:0,l:0});['selDayFat','selDayCust','selDayEnt','selDayLuc'].forEach((id,i)=>{const el=document.getElementById(id);if(el)el.textContent=M([g.f,g.c,g.e,g.l][i])})}
 
 let saleItems=[];
 function updateSaleTotal(){const q=Math.max(1,+document.getElementById('saleQty').value||1),pr=+document.getElementById('salePrice').value||0;const el=document.getElementById('saleTotal');if(el)el.value=(q*pr).toFixed(2)}
@@ -132,7 +133,7 @@ function addSale(){
  S.sales.unshift({id:Date.now(),date:(document.getElementById('saleDate').value||new Date().toISOString().slice(0,10)),product:items.map(x=>x.product).join(' + '),qty:items.reduce((t,x)=>t+x.qty,0),items,revenue,cost,fees,feeRate,deliveryNet,boyPaid,charge,mode,profit,ifoodNet:mode==='ifood'?ifoodNet:0});
  saleItems=[];renderSaleItems();document.getElementById('salesDate').value=document.getElementById('saleDate').value;render()
 }
-function sales(){const selected=document.getElementById('salesDate')?.value||new Date().toISOString().slice(0,10),a=S.sales.filter(x=>x.date===selected);const parts=selected.split('-');const label=parts.length===3?parts[2]+'/'+parts[1]+'/'+parts[0]:selected;document.getElementById('nSales').textContent=a.length+' pedido'+(a.length===1?'':'s')+' • '+label;document.getElementById('sales').innerHTML=a.length?a.map(x=>{const channel=x.mode==='ifood'?'iFood • líquido recebido '+M(x.ifoodNet??x.revenue):'Site/WhatsApp';const items=saleItemList(x);const itemText=items.map(i=>`${i.qty}× ${i.product}`).join(' + ');return `<div class="row" style="justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)"><div><b>${itemText}</b><div class="muted">${channel} • receita ${M(x.revenue)} • motoboy ${M(x.boyPaid??S.cfg.boy)}${x.mode==='ifood'?' • comissão/descontos já considerados':''}</div></div><div style="text-align:right"><b class="green">${M(x.profit)}</b><br><button class="dangerbtn" onclick="delSale(${x.id})">excluir</button></div></div>`}).join(''):'<div class="empty">Nenhuma venda registrada nesta data.</div>'}
+function sales(){const selected=document.getElementById('salesDate')?.value||new Date().toISOString().slice(0,10),a=S.sales.filter(x=>normalizeDate(x.date)===selected);const parts=selected.split('-');const label=parts.length===3?parts[2]+'/'+parts[1]+'/'+parts[0]:selected;document.getElementById('nSales').textContent=a.length+' pedido'+(a.length===1?'':'s')+' • '+label;document.getElementById('sales').innerHTML=a.length?a.map(x=>{const channel=x.mode==='ifood'?'iFood • líquido recebido '+M(x.ifoodNet??x.revenue):'Site/WhatsApp';const items=saleItemList(x);const itemText=items.map(i=>`${i.qty}× ${i.product}`).join(' + ');return `<div class="row" style="justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)"><div><b>${itemText}</b><div class="muted">${channel} • receita ${M(x.revenue)} • motoboy ${M(x.boyPaid??S.cfg.boy)}${x.mode==='ifood'?' • comissão/descontos já considerados':''}</div></div><div style="text-align:right"><b class="green">${M(x.profit)}</b><br><button class="dangerbtn" onclick="delSale(${x.id})">excluir</button></div></div>`}).join(''):'<div class="empty">Nenhuma venda registrada nesta data.</div>'}
 
 function delSale(id){S.sales=S.sales.filter(x=>x.id!==id);render()}
 function prices(){document.getElementById('priceTable').innerHTML=S.products.map(p=>{let pr=price(p),f=fee(pr),lp=pr-f-p[2],manual=p[3]!=null&&p[3]!=='';return `<tr><td>${p[1]}</td><td>${M(p[2])}</td><td><b>${M(pr)}</b>${manual?' <span class="pill">manual</span>':''}</td><td>${M(f)}</td><td class="green"><b>${M(lp)}</b></td></tr>`}).join('')}
@@ -181,6 +182,7 @@ function simpleCost(size){
  const qEl=document.getElementById(size===800?'proteinQty800':'proteinQty');
  const qty=Number(qEl&&qEl.value)||(size===800?300:150);
  if(i) total+=(Number(i.price)||0)/(Number(i.pack)||1)*qty;
+ total += Number(size===800 ? S.cfg.packaging800 : S.cfg.packaging400) || 0;
  return Number.isFinite(total)?total:0;
 }
 function calculateSimpleRecipe(){
@@ -195,8 +197,10 @@ function applySimpleCost(){const pid=document.getElementById('recipeProduct').va
 function renderSimpleRecipeUI(){const ps=document.getElementById('recipeProduct');if(!ps)return;const current=ps.value;ps.innerHTML=S.products.filter(p=>p[4]!=='item').map(p=>`<option value="${p[0]}">${p[1]}</option>`).join('');if(S.products.some(p=>p[0]===current))ps.value=current;const pro=document.getElementById('proteinSelect');const cur=pro.value;pro.innerHTML=proteinIds().map(id=>{const i=ing(id);return i?`<option value="${id}">${i.name} — ${M(i.price)}/${i.pack}${i.unit}</option>`:''}).join('');if(proteinIds().includes(cur))pro.value=cur;const pid=ps.value,p=prod(pid);document.getElementById('simpleTitle').textContent=p?p[1]:'Yakisoba';
   document.getElementById('baseTable').innerHTML=baseItems(400).map(x=>{const i=ing(x.id),c=ingCost(i)*x.q;return `<tr><td>${i.name}</td><td>${i.unit==='g'?M(i.price)+' / kg':M(i.price)+' / '+i.pack+i.unit}</td><td>${x.q}g</td><td>${x.q*2}g</td><td class="green">${M(c)}</td></tr>`}).join('');
   document.getElementById('simpleIngredientEdits').innerHTML=S.ingredients.map(i=>`<div class="row" style="justify-content:space-between;border-bottom:1px solid var(--line);padding:8px 0"><span>${i.name}</span><input style="max-width:105px" type="number" step=".01" value="${i.price}" onchange="updateIngredientPrice('${i.id}',this.value)"></div>`).join('');
+  const p400=document.getElementById('packaging400'),p800=document.getElementById('packaging800'); if(p400)p400.value=Number(S.cfg.packaging400||0).toFixed(2); if(p800)p800.value=Number(S.cfg.packaging800||0).toFixed(2);
   calculateSimpleRecipe();
 }
 function updateIngredientPrice(id,value){const i=ing(id);if(!i)return;i.price=Number(value)||0;render()}
+function updatePackagingPrice(size,value){if(size===800)S.cfg.packaging800=Number(value)||0;else S.cfg.packaging400=Number(value)||0;render()}
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));b.classList.add('active');document.getElementById(b.dataset.v).classList.add('active')});initAuth();
 </script></body></html>
